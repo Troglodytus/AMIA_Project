@@ -1,5 +1,5 @@
 clc; clear all; close all;
-%---------------------------SWI------------------------------------------------------------------------------------
+%--------------------------------------SWI------------------------------------------------------------------------------------
 %------ SPECIFY DATA ------------------------------------------------------
 path = 'C:\Users\Daniel\Documents\FHKärnten\Medical Engineering\2. Semester\Applied Medical Image Analysis\Project_Part1\';
 helper_path = 'C:\Users\Daniel\Documents\FHKärnten\Medical Engineering\2. Semester\Applied Medical Image Analysis\Project_Part1\helper_functions\';
@@ -59,8 +59,8 @@ subplot(1,2,2);
 imshow(masked_phase(:,:,round(size(masked_phase,3)/2)), []);
 title('Masked Unwrapped Phase Image');
 
-% Parameters for Gaussian low-pass filter
-sigma = 4;  % Standard deviation of the Gaussian filter
+% Parameters for Gaussian low-pass filter ---> Unsharp Mask
+sigma = 6;  %standard deviation of the Gaussian filter
 
 % Apply the Gaussian low-pass filter and perform high-pass filtering slice-wise
 high_pass_phase = zeros(size(masked_phase), 'like', masked_phase);
@@ -123,29 +123,24 @@ imshow(swi(:,:,round(size(swi,3)/2)), []);
 title('SWI');
 
 
+%Initialize MIP image as SWI image
+mipswi = swi; 
 
-% % Compute the Minimum Intensity Projection (MIP) along the z-axis
-% window_size = 3;
-% half_window = floor(window_size / 2);
-% 
-% % Initialize MinIP
-% mipswi = zeros(size(swi), 'like', swi);
-% 
-% % Iterate over each pixel location in the image
-% for i = 1:size(swi, 1)
-%     for j = 1:size(swi, 2)
-%         for k = 2:size(swi,3)-1
-% 
-%             neighborhood_values = swi(i, j, z_min:z_max);
-% 
-%             % Compute the minimum intensity value within the neighborhood
-%             mipswi(i, j, :) = min(neighborhood_values, [], 3);
-%         end
-%     end
-% end
-% 
+% Iterate over each slice
+for i = 2:size(swi, 3)-1
+    for j = 1:size(swi,1)
+        for k = 1:size(swi,2)
+            % Take the minimum of the current slice and its neighbors for each pixel
+            prev_pixel = swi(j, k, i-1);
+            current_pixel = swi(j, k, i);
+            next_pixel = swi(j, k, i+1);
+            mipswi(j, k, i) = min(current_pixel, min(prev_pixel, next_pixel));
+        end
+    end
+end
 
-mipswi = min(swi, [], 3);
+
+%mipswi = min(swi, [], 3);
 
 % Create a new NIfTI structure for the MIP SWI image
 mipswinii = make_nii(mipswi);
@@ -155,7 +150,7 @@ save_nii(mipswinii, [data_path, 'mip_swi.nii']);
 
 % Display the MIP SWI image
 figure;
-imshow(mipswi, []);
+imshow(mipswi(:,:,round(size(mipswi,3)/2)), []);
 title('Minimum Intensity Projection SWI');
 
 
@@ -171,4 +166,44 @@ title('SWI');
 subplot(1,3,3);
 imshow(mipswi(:,:,round(size(mipswi,3)/2)), []);
 title('MinIP SWI');
+
+
+%--------------------------------------QSM------------------------------------------------------------------------------------
+qsm_path = 'C:\Users\Daniel\Documents\FHKärnten\Medical Engineering\2. Semester\Applied Medical Image Analysis\Project_Part1\data\qsm\';
+
+%Load QSM nii files
+magnitudeqsmnii = load_nii([qsm_path, 'magnitude.nii']);
+demagnii = load_nii([qsm_path, 'demagnetization_field.nii']);
+chi_modelnii = load_nii([qsm_path, 'chi_model.nii']);
+
+%extract images
+magnitudeqsm = magnitudeqsmnii.img;
+demag_field = demagnii.img;
+chi_model = chi_modelnii.img;
+
+% Display the raw magnitude data
+figure;
+imshow(magnitudeqsm(:,:,round(size(magnitudeqsm,3)/2)), []);
+title('Magnitude Image');
+
+%Brain mask with thresholding
+threshold = 0.1 * max(magnitudeqsm(:)); % Adjust threshold value if necessary
+brain_mask = magnitudeqsm > threshold;
+
+%Apply morphological fix operations to mask
+brain_mask = imfill(brain_mask, 'holes'); %fill holes
+brain_mask = imopen(brain_mask, strel('disk', 5)); %Remove artefacts
+brain_mask = single(brain_mask);
+
+%show brain mask
+figure;
+imshow(brain_mask(:,:,round(size(brain_mask,3)/2)), []);
+title('Brain Mask');
+
+%sve the brain mask as nii
+brain_masknii = make_nii(brain_mask);
+save_nii(brain_masknii, [qsm_path, 'brain_mask.nii']);
+
+
+
 
